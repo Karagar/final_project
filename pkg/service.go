@@ -38,8 +38,9 @@ func (s *Service) Init(ctx context.Context, config *ConfigStruct) {
 			select {
 			case <-ctx.Done():
 				ticker.Stop()
+
 				return
-			case _ = <-ticker.C:
+			case <-ticker.C:
 				s.RemoveOldValues()
 			}
 		}
@@ -84,6 +85,7 @@ func (s *Service) addToBucket(bucketType string, bucketValue string) (isAlive bo
 	for k, v := range curBucket {
 		if v > now-s.config.TimerSec {
 			curBucket = curBucket[k:]
+
 			break
 		}
 	}
@@ -95,13 +97,13 @@ func (s *Service) addToBucket(bucketType string, bucketValue string) (isAlive bo
 	return len(curBucket) < s.config.Limit[bucketType]
 }
 
-func (s *Service) checkLists(adress net.IP) (isAlive bool, needCheck bool) {
+func (s *Service) checkLists(address net.IP) (isAlive bool, needCheck bool) {
 	needCheck = true
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	for _, v := range s.config.WhiteList {
-		if v.Contains(adress) {
+		if v.Contains(address) {
 			isAlive = true
 			needCheck = false
 		}
@@ -109,7 +111,7 @@ func (s *Service) checkLists(adress net.IP) (isAlive bool, needCheck bool) {
 
 	if needCheck {
 		for _, v := range s.config.BlackList {
-			if v.Contains(adress) {
+			if v.Contains(address) {
 				isAlive = false
 				needCheck = false
 			}
@@ -131,6 +133,7 @@ func (s *Service) Authorization(ctx context.Context, in *AuthRequest) (*AuthResp
 		ipAnswer := s.addToBucket("ip", in.Ip)
 		isAlive = loginAnswer && passwordAnswer && ipAnswer
 	}
+
 	return &AuthResponse{Ok: isAlive}, nil
 }
 
@@ -139,6 +142,7 @@ func (s *Service) DropBucket(ctx context.Context, in *DropBucketParams) (*emptyp
 	tmp["ip"] = append(tmp["ip"], in.Ip)
 	tmp["login"] = append(tmp["login"], in.Login)
 	s.RemoveBuckets(tmp)
+
 	return &emptypb.Empty{}, nil
 }
 
@@ -147,6 +151,7 @@ func (s *Service) AddBlackList(ctx context.Context, in *Subnet) (*emptypb.Empty,
 	s.lock.Lock()
 	s.config.BlackList = append(s.config.BlackList, *updatedSubnet)
 	s.lock.Unlock()
+
 	return &emptypb.Empty{}, err
 }
 
@@ -162,6 +167,7 @@ func (s *Service) RemoveBlackList(ctx context.Context, in *Subnet) (*emptypb.Emp
 		s.config.BlackList = append(s.config.BlackList[:indexToRemove], s.config.BlackList[indexToRemove+1:]...)
 		s.lock.Unlock()
 	}
+
 	return &emptypb.Empty{}, nil
 }
 
@@ -170,6 +176,7 @@ func (s *Service) AddWhiteList(ctx context.Context, in *Subnet) (*emptypb.Empty,
 	s.lock.Lock()
 	s.config.WhiteList = append(s.config.WhiteList, *updatedSubnet)
 	s.lock.Unlock()
+
 	return &emptypb.Empty{}, err
 }
 
@@ -185,5 +192,6 @@ func (s *Service) RemoveWhiteList(ctx context.Context, in *Subnet) (*emptypb.Emp
 		s.config.WhiteList = append(s.config.WhiteList[:indexToRemove], s.config.WhiteList[indexToRemove+1:]...)
 		s.lock.Unlock()
 	}
+
 	return &emptypb.Empty{}, nil
 }

@@ -28,7 +28,12 @@ func main() {
 		"password": 5,
 		"ip":       5,
 	}
-	config := &bouncer.ConfigStruct{15, limit, []net.IPNet{}, []net.IPNet{}}
+	config := &bouncer.ConfigStruct{
+		TimerSec:  15,
+		Limit:     limit,
+		WhiteList: []net.IPNet{},
+		BlackList: []net.IPNet{},
+	}
 	service.Init(ctx, config)
 
 	bouncer.RegisterBouncerServer(server, service)
@@ -36,7 +41,7 @@ func main() {
 	log.Printf("Starting server on %s", lsn.Addr().String())
 
 	if err := server.Serve(lsn); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 	// TODO server.GracefulStop()
 }
