@@ -18,10 +18,18 @@ func main() {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
 	server := grpc.NewServer()
 	service := &bouncer.Service{}
-	service.Init(ctx, 15, []string{}, []string{})
+
+	// TODO добавить конфиги для времени наблюдения, количества запросов, вайт/блек листов
+	// TODO При добавлении подсети проверять в обоих списках наличие уже такой подсети
+	limit := map[string]int{
+		"login":    5,
+		"password": 5,
+		"ip":       5,
+	}
+	config := &bouncer.ConfigStruct{15, limit, []net.IPNet{}, []net.IPNet{}}
+	service.Init(ctx, config)
 
 	bouncer.RegisterBouncerServer(server, service)
 
