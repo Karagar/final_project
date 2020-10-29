@@ -1,0 +1,11 @@
+version: "3.4"
+
+services:
+  bouncer:
+    container_name: bouncer
+    build: .
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+    - CONFIG_PATH=./config.yaml

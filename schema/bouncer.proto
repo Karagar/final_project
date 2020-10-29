@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+// import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+package bouncer;
+
+message AuthRequest {
+    string login = 1;
+    string password = 2;
+    string ip = 3;
+}
+
+message AuthResponse {
+    bool ok = 1;
+}
+
+message DropBucketParams {
+    string login = 1;
+    string ip = 2;
+}
+
+message Subnet {
+    string subnet = 1;
+}
+
+service Bouncer {
+    rpc Authorization(AuthRequest) returns (AuthResponse) {}
+    rpc DropBucket(DropBucketParams) returns (google.protobuf.Empty) {}
+    rpc AddBlackList(Subnet) returns (google.protobuf.Empty) {}
+    rpc RemoveBlackList(Subnet) returns (google.protobuf.Empty) {}
+    rpc AddWhiteList(Subnet) returns (google.protobuf.Empty) {}
+    rpc RemoveWhiteList(Subnet) returns (google.protobuf.Empty) {}
+}
