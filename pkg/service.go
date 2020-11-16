@@ -2,11 +2,15 @@ package bouncer
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	sync "sync"
 	"time"
 
+	"google.golang.org/grpc"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -14,96 +18,159 @@ type Service struct {
 	lock        sync.RWMutex
 	bucketBunch map[string]buckets
 	config      ConfigStruct
+	server      *grpc.Server
+	listener    net.Listener
 }
 
 type ConfigStruct struct {
-	TimerSec  int64
-	Limit     map[string]int
-	WhiteList []net.IPNet
-	BlackList []net.IPNet
+	ListenerAdress string
+	TimerSec       int64
+	Limit          map[string]int
+	WhiteList      []net.IPNet
+	BlackList      []net.IPNet
 }
 
-type buckets map[string][]int64
+type buckets map[string]bucketDetail
 
-func (s *Service) Init(ctx context.Context, config *ConfigStruct) {
+type bucketDetail struct {
+	MainChan       chan int64
+	FlagToDelition bool
+}
+
+func (s *Service) InitService() {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	s.InitRemover(ctx)
+
+	lsn, err := net.Listen("tcp", s.config.ListenerAdress)
+	PanicOnErr(err)
+	log.Printf("Starting server on %s", lsn.Addr().String())
+
+	s.listener = lsn
+	s.server = grpc.NewServer()
+	RegisterBouncerServer(s.server, s)
+	err = s.server.Serve(lsn)
+	PanicOnErr(err)
+}
+
+func (s *Service) ShutDown() {
+	s.server.Stop()
+	s.listener.Close()
+}
+
+func (s *Service) InitRemover(ctx context.Context) {
+	s.loadConfig()
 	s.bucketBunch = map[string]buckets{}
-	for k := range config.Limit {
+	for k := range s.config.Limit {
 		s.bucketBunch[k] = buckets{}
 	}
-	s.config = *config
-	ticker := time.NewTicker(time.Duration(config.TimerSec) * time.Second)
+	ticker := time.NewTicker(time.Duration(s.config.TimerSec) * time.Second)
 
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				ticker.Stop()
-
 				return
 			case <-ticker.C:
-				s.RemoveOldValues()
+				s.RemoveEmptyBuckets()
 			}
 		}
 	}()
 }
 
-func (s *Service) RemoveOldValues() {
-	tmp := map[string][]string{}
-	now := time.Now().Unix()
+func (s *Service) loadConfig() {
+	config := ConfigStruct{}
+	cfgFile := os.Getenv("CONFIG_FILE")
+	if cfgFile == "" {
+		cfgFile = "./config/config.json"
+	}
 
-	s.lock.RLock()
+	configJSONFile, err := os.Open(cfgFile)
+	PanicOnErr(err)
+	configByteValue, err := ioutil.ReadAll(configJSONFile)
+	PanicOnErr(err)
+	configJSONFile.Close()
+
+	PanicOnErr(json.Unmarshal(configByteValue, &config))
+	s.config = config
+}
+
+func (s *Service) RemoveEmptyBuckets() {
+	s.lock.Lock()
 	for bucketType, bucketsByType := range s.bucketBunch {
 		for key, bucket := range bucketsByType {
-			if bucket[len(bucket)-1] < now-s.config.TimerSec {
-				tmp[bucketType] = append(tmp[bucketType], key)
+			if bucket.FlagToDelition {
+				close(bucket.MainChan)
+				delete(s.bucketBunch[bucketType], key)
+			}
+			bucket.FlagToDelition = true
+		}
+	}
+	s.lock.Unlock()
+}
+
+func (s *Service) RemoveBucket(bucketType string, bucketKey string) {
+	s.lock.Lock()
+	close(s.bucketBunch[bucketType][bucketKey].MainChan)
+	delete(s.bucketBunch[bucketType], bucketKey)
+	s.lock.Unlock()
+}
+
+func (s *Service) addToBucket(bucketType string, bucketKey string) (isAlive bool) {
+	curBucket, ok := s.bucketBunch[bucketType][bucketKey]
+	if !ok {
+		curBucket = bucketDetail{
+			MainChan:       make(chan int64, s.config.Limit[bucketType]),
+			FlagToDelition: false,
+		}
+		s.lock.Lock()
+		s.bucketBunch[bucketType][bucketKey] = curBucket
+		s.lock.Unlock()
+	}
+	if curBucket.FlagToDelition == true {
+		curBucket.FlagToDelition = false
+		s.lock.Lock()
+		s.bucketBunch[bucketType][bucketKey] = curBucket
+		s.lock.Unlock()
+	}
+
+	curBucketChan := curBucket.MainChan
+	now := time.Now().Unix()
+	oldTime := time.Now().Unix() - s.config.TimerSec
+
+	select {
+	case curBucketChan <- now:
+		return true
+	default:
+		for {
+			nextElem := <-curBucketChan
+			if nextElem > oldTime {
+				break
+			}
+			if len(curBucketChan) == 0 {
+				break
 			}
 		}
 	}
-	s.lock.RUnlock()
-	s.RemoveBuckets(tmp)
-}
 
-func (s *Service) RemoveBuckets(toRemove map[string][]string) {
-	s.lock.Lock()
-	for bucketType, buckets := range toRemove {
-		for _, bucket := range buckets {
-			delete(s.bucketBunch[bucketType], bucket)
-		}
+	select {
+	case curBucketChan <- now:
+		return len(curBucketChan) < s.config.Limit[bucketType]
+	default:
+		return false
 	}
-	s.lock.Unlock()
 }
 
-func (s *Service) addToBucket(bucketType string, bucketValue string) (isAlive bool) {
-	s.lock.RLock()
-	curBucket := s.bucketBunch[bucketType][bucketValue]
-	s.lock.RUnlock()
-
-	now := time.Now().Unix()
-
-	curBucket = append(curBucket, now)
-	// Проходим только по уже не актуальным датам
-	for k, v := range curBucket {
-		if v > now-s.config.TimerSec {
-			curBucket = curBucket[k:]
-
-			break
-		}
-	}
-
-	s.lock.Lock()
-	s.bucketBunch[bucketType][bucketValue] = curBucket
-	s.lock.Unlock()
-
-	return len(curBucket) < s.config.Limit[bucketType]
-}
-
-func (s *Service) checkLists(address net.IP) (isAlive bool, needCheck bool) {
+func (s *Service) checkLists(address string) (isAlive bool, needCheck bool) {
+	updatedIP := net.ParseIP(address)
 	needCheck = true
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	for _, v := range s.config.WhiteList {
-		if v.Contains(address) {
+		if v.Contains(updatedIP) {
 			isAlive = true
 			needCheck = false
 		}
@@ -111,7 +178,7 @@ func (s *Service) checkLists(address net.IP) (isAlive bool, needCheck bool) {
 
 	if needCheck {
 		for _, v := range s.config.BlackList {
-			if v.Contains(address) {
+			if v.Contains(updatedIP) {
 				isAlive = false
 				needCheck = false
 			}
@@ -122,11 +189,9 @@ func (s *Service) checkLists(address net.IP) (isAlive bool, needCheck bool) {
 }
 
 func (s *Service) Authorization(ctx context.Context, in *AuthRequest) (*AuthResponse, error) {
-	log.Printf("new auth receive (Login=%v, Password=%v, Ip=%v)",
-		in.Login, in.Password, in.Ip)
+	log.Printf("new auth receive (Login=%v, Password=%v, Ip=%v)", in.Login, in.Password, in.Ip)
 
-	updatedIP := net.ParseIP(in.Ip)
-	isAlive, needCheck := s.checkLists(updatedIP)
+	isAlive, needCheck := s.checkLists(in.Ip)
 	if needCheck {
 		loginAnswer := s.addToBucket("login", in.Login)
 		passwordAnswer := s.addToBucket("password", in.Password)
@@ -138,15 +203,14 @@ func (s *Service) Authorization(ctx context.Context, in *AuthRequest) (*AuthResp
 }
 
 func (s *Service) DropBucket(ctx context.Context, in *DropBucketParams) (*emptypb.Empty, error) {
-	tmp := map[string][]string{}
-	tmp["ip"] = append(tmp["ip"], in.Ip)
-	tmp["login"] = append(tmp["login"], in.Login)
-	s.RemoveBuckets(tmp)
+	s.RemoveBucket("ip", in.Ip)
+	s.RemoveBucket("login", in.Login)
 
 	return &emptypb.Empty{}, nil
 }
 
 func (s *Service) AddBlackList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
+	s.RemoveWhiteList(ctx, in)
 	_, updatedSubnet, err := net.ParseCIDR(in.Subnet)
 	s.lock.Lock()
 	s.config.BlackList = append(s.config.BlackList, *updatedSubnet)
@@ -172,6 +236,7 @@ func (s *Service) RemoveBlackList(ctx context.Context, in *Subnet) (*emptypb.Emp
 }
 
 func (s *Service) AddWhiteList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
+	s.RemoveBlackList(ctx, in)
 	_, updatedSubnet, err := net.ParseCIDR(in.Subnet)
 	s.lock.Lock()
 	s.config.WhiteList = append(s.config.WhiteList, *updatedSubnet)
@@ -194,4 +259,10 @@ func (s *Service) RemoveWhiteList(ctx context.Context, in *Subnet) (*emptypb.Emp
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func PanicOnErr(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }

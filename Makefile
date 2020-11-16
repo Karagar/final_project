@@ -4,14 +4,11 @@ generate:
 srv:
 	go run ./service/main.go
 
-cli:
-	go run ./client/main.go
-
 build:
-	go build -o ./client ./client/main.go && go build -o ./service ./service/main.go 
+	go build -o ./service ./service/main.go 
 
 test:
-	go test -race -count 100 ./pkg/...
+	go test -v -race -count 100 ./tests/...
 
 run:
 	go run ./service/main.go

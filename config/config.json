@@ -1,0 +1,11 @@
+{
+    "ListenerAdress":"localhost:50051",
+    "TimerSec":15,
+    "Limit": {
+        "login":    5,
+		"password": 5,
+		"ip":       5
+    },
+    "WhiteList":[],
+    "BlackList":[]
+}
