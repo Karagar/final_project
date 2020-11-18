@@ -1,9 +1,10 @@
 package main
 
 import (
-	"fmt"
+	bouncer "../pkg"
 )
 
 func main() {
-	fmt.Println("Done")
+	service := &bouncer.Service{}
+	service.InitService()
 }
