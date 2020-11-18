@@ -6,6 +6,10 @@ go:
 notifications:
   email: false
 
+env:
+  global:
+    - GO111MODULE=on
+
 jobs:
   include:
     - stage: "Compile"
