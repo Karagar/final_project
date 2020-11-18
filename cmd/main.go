@@ -7,5 +7,4 @@ import (
 func main() {
 	service := &bouncer.Service{}
 	service.InitService()
-	// TODO server.GracefullShutDown()
 }
