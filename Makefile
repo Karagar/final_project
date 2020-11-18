@@ -2,7 +2,7 @@ generate:
 	cd schema && protoc --go_out=plugins=grpc:../pkg bouncer.proto
 
 build:
-	go run main.go 
+	go build -o .bin/bouncer main.go 
 
 test:
 	go test -v -race -count 100 ./tests/...
