@@ -1,7 +1,7 @@
 package main
 
 import (
-	bouncer "../pkg"
+	bouncer "github.com/Karagar/final_project/pkg"
 )
 
 func main() {
