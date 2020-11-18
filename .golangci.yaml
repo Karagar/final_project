@@ -17,4 +17,3 @@ linters:
     - nlreturn
     - testpackage
     - wsl
-    - wrapcheck
