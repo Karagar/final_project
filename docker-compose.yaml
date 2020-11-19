@@ -8,6 +8,6 @@ services:
       dockerfile: ./Dockerfile
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "50051:50051"
     environment:
     - CONFIG_PATH=./config.yaml

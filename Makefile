@@ -14,5 +14,5 @@ test:
 	go test -v -race -count 100 ./pkg/...
 
 itests:
-	docker-compose -f ./docker-compose-tests.yaml up -d --abort-on-container-exit --exit-code-from itests && \
+	docker-compose -f ./docker-compose-tests.yaml up --abort-on-container-exit --exit-code-from itests && \
 	docker-compose -f ./docker-compose-tests.yaml down
