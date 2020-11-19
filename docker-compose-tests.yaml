@@ -11,7 +11,7 @@ services:
     environment:
       - CONFIG_PATH=./config.yaml
 
-  integration-tests:
+  itests:
     image: golang:1.15
     volumes:
       - ./:/app/
