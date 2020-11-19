@@ -3,7 +3,9 @@ version: "3.4"
 services:
   bouncer:
     container_name: bouncer
-    build: .
+    build: 
+      context: .
+      dockerfile: ./Dockerfile
     restart: unless-stopped
     ports:
       - "80:80"

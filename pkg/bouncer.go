@@ -10,6 +10,7 @@ import (
 	sync "sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
@@ -244,7 +245,7 @@ func (s *Service) AddSubnetToList(subnet string, listType string) error {
 
 	_, updatedSubnet, err := net.ParseCIDR(subnet)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Adding subnet to list")
 	}
 
 	s.lock.Lock()
