@@ -10,4 +10,4 @@ services:
     ports:
       - "50051:50051"
     environment:
-    - CONFIG_PATH=./config.yaml
+    - CONFIG_PATH=./config/config.json

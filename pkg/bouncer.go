@@ -15,7 +15,7 @@ import (
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
-const defaultConfigPath = "./config/config.json"
+const defaultConfigPath = "../config/config.json"
 
 type Service struct {
 	lock        sync.RWMutex
@@ -82,7 +82,7 @@ func (s *Service) InitRemover(ctx context.Context) {
 
 func (s *Service) loadConfig() {
 	config := ConfigStruct{}
-	cfgFile := os.Getenv("CONFIG_FILE")
+	cfgFile := os.Getenv("CONFIG_PATH")
 	if cfgFile == "" {
 		cfgFile = defaultConfigPath
 	}

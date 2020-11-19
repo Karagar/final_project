@@ -15,18 +15,19 @@ var bouncer *Service
 
 func init() {
 	bouncer = &Service{}
-	os.Setenv("CONFIG_FILE", "../config/config.json")
+	os.Setenv("CONFIG_PATH", "../config/config.json")
 	bouncer.loadConfig()
 	bouncer.initValues()
 	fmt.Println("init Done")
 }
 
 func TestRun(t *testing.T) {
-	testInt := rand.Intn(int(time.Now().UTC().UnixNano()))
+	unixNano := int(time.Now().UTC().UnixNano())
+	testInt := rand.Intn(unixNano)
 	testLogin := strconv.Itoa(testInt)
-	testIp := strconv.Itoa(testInt%(rand.Intn(254)+1)) + "." + strconv.Itoa(testInt%(rand.Intn(254)+1)) + "."
-	testIp = testIp + strconv.Itoa(testInt%(rand.Intn(254)+1)) + "." + strconv.Itoa(testInt%(rand.Intn(254)+1))
-	testSubnet := testIp + "/24"
+	testIP := strconv.Itoa(testInt%(rand.Intn(254)+1)) + "." + strconv.Itoa(testInt%(rand.Intn(254)+1)) + "."
+	testIP = testIP + strconv.Itoa(testInt%(rand.Intn(254)+1)) + "." + strconv.Itoa(testInt%(rand.Intn(254)+1))
+	testSubnet := testIP + "/24"
 	var err error
 
 	for i := 0; i <= bouncer.config.Limit["login"]; i++ {
@@ -54,14 +55,14 @@ func TestRun(t *testing.T) {
 	require.True(t, target)
 	err = bouncer.AddSubnetToList(testSubnet, "black")
 	require.Nil(t, err)
-	isAlive, needCheck := bouncer.checkLists(testIp)
+	isAlive, needCheck := bouncer.checkLists(testIP)
 	require.False(t, isAlive)
 	require.False(t, needCheck)
 
 	//Провека white list
 	err = bouncer.AddSubnetToList(testSubnet, "white")
 	require.Nil(t, err)
-	isAlive, needCheck = bouncer.checkLists(testIp)
+	isAlive, needCheck = bouncer.checkLists(testIP)
 	require.True(t, isAlive)
 	require.False(t, needCheck)
 }
