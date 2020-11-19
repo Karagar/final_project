@@ -6,6 +6,8 @@
 		"password": 5,
 		"ip":       5
     },
-    "WhiteList":[],
-    "BlackList":[]
+    "Lists": {
+        "black":    [],
+		"white":    []
+    }
 }

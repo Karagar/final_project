@@ -14,6 +14,8 @@ import (
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
+const defaultConfigPath = "./config/config.json"
+
 type Service struct {
 	lock        sync.RWMutex
 	bucketBunch map[string]buckets
@@ -26,8 +28,7 @@ type ConfigStruct struct {
 	ListenerAdress string
 	TimerSec       int64
 	Limit          map[string]int
-	WhiteList      []net.IPNet
-	BlackList      []net.IPNet
+	Lists          map[string][]net.IPNet
 }
 
 type buckets map[string]bucketDetail
@@ -41,6 +42,9 @@ func (s *Service) InitService() {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	s.loadConfig()
+	s.initValues()
 	s.InitRemover(ctx)
 
 	lsn, err := net.Listen("tcp", s.config.ListenerAdress)
@@ -60,11 +64,6 @@ func (s *Service) ShutDown() {
 }
 
 func (s *Service) InitRemover(ctx context.Context) {
-	s.loadConfig()
-	s.bucketBunch = map[string]buckets{}
-	for k := range s.config.Limit {
-		s.bucketBunch[k] = buckets{}
-	}
 	ticker := time.NewTicker(time.Duration(s.config.TimerSec) * time.Second)
 
 	go func() {
@@ -84,7 +83,7 @@ func (s *Service) loadConfig() {
 	config := ConfigStruct{}
 	cfgFile := os.Getenv("CONFIG_FILE")
 	if cfgFile == "" {
-		cfgFile = "./config/config.json"
+		cfgFile = defaultConfigPath
 	}
 
 	configJSONFile, err := os.Open(cfgFile)
@@ -95,6 +94,13 @@ func (s *Service) loadConfig() {
 
 	PanicOnErr(json.Unmarshal(configByteValue, &config))
 	s.config = config
+}
+
+func (s *Service) initValues() {
+	s.bucketBunch = map[string]buckets{}
+	for k := range s.config.Limit {
+		s.bucketBunch[k] = buckets{}
+	}
 }
 
 func (s *Service) RemoveEmptyBuckets() {
@@ -129,7 +135,7 @@ func (s *Service) addToBucket(bucketType string, bucketKey string) (isAlive bool
 		s.bucketBunch[bucketType][bucketKey] = curBucket
 		s.lock.Unlock()
 	}
-	if curBucket.FlagToDelition == true {
+	if curBucket.FlagToDelition {
 		curBucket.FlagToDelition = false
 		s.lock.Lock()
 		s.bucketBunch[bucketType][bucketKey] = curBucket
@@ -169,7 +175,7 @@ func (s *Service) checkLists(address string) (isAlive bool, needCheck bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	for _, v := range s.config.WhiteList {
+	for _, v := range s.config.Lists["white"] {
 		if v.Contains(updatedIP) {
 			isAlive = true
 			needCheck = false
@@ -177,7 +183,7 @@ func (s *Service) checkLists(address string) (isAlive bool, needCheck bool) {
 	}
 
 	if needCheck {
-		for _, v := range s.config.BlackList {
+		for _, v := range s.config.Lists["black"] {
 			if v.Contains(updatedIP) {
 				isAlive = false
 				needCheck = false
@@ -210,55 +216,56 @@ func (s *Service) DropBucket(ctx context.Context, in *DropBucketParams) (*emptyp
 }
 
 func (s *Service) AddBlackList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
-	s.RemoveWhiteList(ctx, in)
-	_, updatedSubnet, err := net.ParseCIDR(in.Subnet)
-	s.lock.Lock()
-	s.config.BlackList = append(s.config.BlackList, *updatedSubnet)
-	s.lock.Unlock()
-
+	err := s.AddSubnetToList(in.Subnet, "black")
 	return &emptypb.Empty{}, err
 }
 
 func (s *Service) RemoveBlackList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
-	indexToRemove := -1
-	for i, v := range s.config.BlackList {
-		if v.String() == in.Subnet {
-			indexToRemove = i
-		}
-	}
-	if indexToRemove >= 0 {
-		s.lock.Lock()
-		s.config.BlackList = append(s.config.BlackList[:indexToRemove], s.config.BlackList[indexToRemove+1:]...)
-		s.lock.Unlock()
-	}
-
+	s.RemoveSubnetFromList(in.Subnet, "black")
 	return &emptypb.Empty{}, nil
 }
 
 func (s *Service) AddWhiteList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
-	s.RemoveBlackList(ctx, in)
-	_, updatedSubnet, err := net.ParseCIDR(in.Subnet)
-	s.lock.Lock()
-	s.config.WhiteList = append(s.config.WhiteList, *updatedSubnet)
-	s.lock.Unlock()
-
+	err := s.AddSubnetToList(in.Subnet, "white")
 	return &emptypb.Empty{}, err
 }
 
 func (s *Service) RemoveWhiteList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
+	s.RemoveSubnetFromList(in.Subnet, "white")
+	return &emptypb.Empty{}, nil
+}
+
+func (s *Service) AddSubnetToList(subnet string, listType string) error {
+	oppositeListType := "white"
+	if oppositeListType == listType {
+		oppositeListType = "black"
+	}
+	s.RemoveSubnetFromList(subnet, oppositeListType)
+
+	_, updatedSubnet, err := net.ParseCIDR(subnet)
+	if err != nil {
+		return err
+	}
+
+	s.lock.Lock()
+	s.config.Lists[listType] = append(s.config.Lists[listType], *updatedSubnet)
+	s.lock.Unlock()
+
+	return nil
+}
+
+func (s *Service) RemoveSubnetFromList(subnet string, listType string) {
 	indexToRemove := -1
-	for i, v := range s.config.WhiteList {
-		if v.String() == in.Subnet {
+	for i, v := range s.config.Lists[listType] {
+		if v.String() == subnet {
 			indexToRemove = i
 		}
 	}
 	if indexToRemove >= 0 {
 		s.lock.Lock()
-		s.config.WhiteList = append(s.config.WhiteList[:indexToRemove], s.config.WhiteList[indexToRemove+1:]...)
+		s.config.Lists[listType] = append(s.config.Lists[listType][:indexToRemove], s.config.Lists[listType][indexToRemove+1:]...)
 		s.lock.Unlock()
 	}
-
-	return &emptypb.Empty{}, nil
 }
 
 func PanicOnErr(err error) {

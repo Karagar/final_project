@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	bouncer "../pkg"
+	bouncer "github.com/Karagar/final_project/pkg"
 )
 
 var service *bouncer.Service

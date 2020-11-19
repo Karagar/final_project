@@ -27,3 +27,4 @@ jobs:
 
     - stage: "Integration Tests"
       name: "Integration Tests"
+      script: make itest

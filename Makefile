@@ -5,7 +5,10 @@ build:
 	go build -o .bin/bouncer ./cmd/main.go
 
 test:
-	go test -v -race -count 100 ./tests/...
+	go test -v -race -count 100 ./pkg/...
+
+itest:
+	docker-compose -f ./docker-compose-test.yaml up -d
 
 run:
 	go run ./cmd/main.go
