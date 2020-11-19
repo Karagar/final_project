@@ -196,7 +196,6 @@ func (s *Service) checkLists(address string) (isAlive bool, needCheck bool) {
 }
 
 func (s *Service) Authorization(ctx context.Context, in *AuthRequest) (*AuthResponse, error) {
-	log.Printf("new auth receive (Login=%v, Password=%v, Ip=%v)", in.Login, in.Password, in.Ip)
 
 	isAlive, needCheck := s.checkLists(in.Ip)
 	if needCheck {
@@ -217,23 +216,19 @@ func (s *Service) DropBucket(ctx context.Context, in *DropBucketParams) (*emptyp
 }
 
 func (s *Service) AddBlackList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
-	err := s.AddSubnetToList(in.Subnet, "black")
-	return &emptypb.Empty{}, err
+	return &emptypb.Empty{}, s.AddSubnetToList(in.Subnet, "black")
 }
 
 func (s *Service) RemoveBlackList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
-	s.RemoveSubnetFromList(in.Subnet, "black")
-	return &emptypb.Empty{}, nil
+	return &emptypb.Empty{}, s.RemoveSubnetFromList(in.Subnet, "black")
 }
 
 func (s *Service) AddWhiteList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
-	err := s.AddSubnetToList(in.Subnet, "white")
-	return &emptypb.Empty{}, err
+	return &emptypb.Empty{}, s.AddSubnetToList(in.Subnet, "white")
 }
 
 func (s *Service) RemoveWhiteList(ctx context.Context, in *Subnet) (*emptypb.Empty, error) {
-	s.RemoveSubnetFromList(in.Subnet, "white")
-	return &emptypb.Empty{}, nil
+	return &emptypb.Empty{}, s.RemoveSubnetFromList(in.Subnet, "white")
 }
 
 func (s *Service) AddSubnetToList(subnet string, listType string) error {
@@ -241,7 +236,10 @@ func (s *Service) AddSubnetToList(subnet string, listType string) error {
 	if oppositeListType == listType {
 		oppositeListType = "black"
 	}
-	s.RemoveSubnetFromList(subnet, oppositeListType)
+	err := s.RemoveSubnetFromList(subnet, oppositeListType)
+	if err != nil {
+		return errors.Wrap(err, "Adding subnet to list")
+	}
 
 	_, updatedSubnet, err := net.ParseCIDR(subnet)
 	if err != nil {
@@ -255,8 +253,14 @@ func (s *Service) AddSubnetToList(subnet string, listType string) error {
 	return nil
 }
 
-func (s *Service) RemoveSubnetFromList(subnet string, listType string) {
+func (s *Service) RemoveSubnetFromList(subnet string, listType string) error {
 	indexToRemove := -1
+	_, updatedSubnet, err := net.ParseCIDR(subnet)
+	if err != nil {
+		return errors.Wrap(err, "Removing subnet from list")
+	}
+	subnet = updatedSubnet.String()
+
 	for i, v := range s.config.Lists[listType] {
 		if v.String() == subnet {
 			indexToRemove = i
@@ -267,6 +271,7 @@ func (s *Service) RemoveSubnetFromList(subnet string, listType string) {
 		s.config.Lists[listType] = append(s.config.Lists[listType][:indexToRemove], s.config.Lists[listType][indexToRemove+1:]...)
 		s.lock.Unlock()
 	}
+	return nil
 }
 
 func PanicOnErr(err error) {
