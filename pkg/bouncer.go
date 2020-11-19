@@ -196,7 +196,6 @@ func (s *Service) checkLists(address string) (isAlive bool, needCheck bool) {
 }
 
 func (s *Service) Authorization(ctx context.Context, in *AuthRequest) (*AuthResponse, error) {
-
 	isAlive, needCheck := s.checkLists(in.Ip)
 	if needCheck {
 		loginAnswer := s.addToBucket("login", in.Login)
