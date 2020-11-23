@@ -111,8 +111,13 @@ func (s *Service) RemoveEmptyBuckets() {
 			if bucket.FlagToDelition {
 				close(bucket.MainChan)
 				delete(s.bucketBunch[bucketType], key)
+			} else {
+				curBucket := bucketDetail{
+					MainChan:       bucket.MainChan,
+					FlagToDelition: true,
+				}
+				s.bucketBunch[bucketType][key] = curBucket
 			}
-			bucket.FlagToDelition = true
 		}
 	}
 	s.lock.Unlock()
