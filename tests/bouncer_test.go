@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	bouncer "github.com/Karagar/final_project/pkg"
+	bouncer "github.com/Karagar/final_project/bouncer"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -39,59 +39,57 @@ func TestRun(t *testing.T) {
 	dropBucketRequest := bouncer.DropBucketParams{Login: testLogin, Ip: testIP}
 	subnetRequest := bouncer.Subnet{Subnet: testSubnet}
 
-	for i := 0; i < 10; i++ {
+	t.Run("bucket overflow and deleting", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			authResponse, err := client.Authorization(ctx, &authRequest)
+			require.Nil(t, err)
+			require.True(t, authResponse.GetOk())
+		}
 		authResponse, err := client.Authorization(ctx, &authRequest)
 		require.Nil(t, err)
+		require.False(t, authResponse.GetOk())
+		_, err = client.DropBucket(ctx, &dropBucketRequest)
+		require.Nil(t, err)
+		authResponse, err = client.Authorization(ctx, &authRequest)
+		require.Nil(t, err)
 		require.True(t, authResponse.GetOk())
-	}
-	// Проверка переполнения
-	authResponse, err := client.Authorization(ctx, &authRequest)
-	require.Nil(t, err)
-	require.False(t, authResponse.GetOk())
+	})
 
-	//Провека white list
-	_, err = client.AddWhiteList(ctx, &subnetRequest)
-	require.Nil(t, err)
+	t.Run("blacklist", func(t *testing.T) {
+		_, err = client.DropBucket(ctx, &dropBucketRequest)
+		require.Nil(t, err)
+		_, err = client.AddBlackList(ctx, &subnetRequest)
+		require.Nil(t, err)
+		authResponse, err := client.Authorization(ctx, &authRequest)
+		require.Nil(t, err)
+		require.False(t, authResponse.GetOk())
+		_, err = client.RemoveBlackList(ctx, &subnetRequest)
+		require.Nil(t, err)
+		authResponse, err = client.Authorization(ctx, &authRequest)
+		require.Nil(t, err)
+		require.True(t, authResponse.GetOk())
+	})
 
-	// Проверка ответа
-	authResponse, err = client.Authorization(ctx, &authRequest)
-	require.Nil(t, err)
-	require.True(t, authResponse.GetOk())
-
-	//Провека удаления из white list
-	_, err = client.RemoveWhiteList(ctx, &subnetRequest)
-	require.Nil(t, err)
-
-	time.Sleep(2 * time.Second)
-	// Проверка ответа
-	authResponse, err = client.Authorization(ctx, &authRequest)
-	require.Nil(t, err)
-	require.False(t, authResponse.GetOk())
-
-	// Проверка очистки
-	_, err = client.DropBucket(ctx, &dropBucketRequest)
-	require.Nil(t, err)
-
-	// Проверка ответа
-	authResponse, err = client.Authorization(ctx, &authRequest)
-	require.Nil(t, err)
-	require.True(t, authResponse.GetOk())
-
-	//Провека black list
-	_, err = client.AddBlackList(ctx, &subnetRequest)
-	require.Nil(t, err)
-
-	// Проверка ответа
-	authResponse, err = client.Authorization(ctx, &authRequest)
-	require.Nil(t, err)
-	require.False(t, authResponse.GetOk())
-
-	//Провека удаления из black list
-	_, err = client.RemoveBlackList(ctx, &subnetRequest)
-	require.Nil(t, err)
-
-	// Проверка ответа
-	authResponse, err = client.Authorization(ctx, &authRequest)
-	require.Nil(t, err)
-	require.True(t, authResponse.GetOk())
+	t.Run("whitelist", func(t *testing.T) {
+		_, err = client.DropBucket(ctx, &dropBucketRequest)
+		require.Nil(t, err)
+		for i := 0; i < 10; i++ {
+			authResponse, err := client.Authorization(ctx, &authRequest)
+			require.Nil(t, err)
+			require.True(t, authResponse.GetOk())
+		}
+		authResponse, err := client.Authorization(ctx, &authRequest)
+		require.Nil(t, err)
+		require.False(t, authResponse.GetOk())
+		_, err = client.AddWhiteList(ctx, &subnetRequest)
+		require.Nil(t, err)
+		authResponse, err = client.Authorization(ctx, &authRequest)
+		require.Nil(t, err)
+		require.True(t, authResponse.GetOk())
+		_, err = client.RemoveWhiteList(ctx, &subnetRequest)
+		require.Nil(t, err)
+		authResponse, err = client.Authorization(ctx, &authRequest)
+		require.Nil(t, err)
+		require.False(t, authResponse.GetOk())
+	})
 }

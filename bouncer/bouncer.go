@@ -131,22 +131,19 @@ func (s *Service) RemoveBucket(bucketType string, bucketKey string) {
 }
 
 func (s *Service) addToBucket(bucketType string, bucketKey string) (isAlive bool) {
+	s.lock.Lock()
 	curBucket, ok := s.bucketBunch[bucketType][bucketKey]
 	if !ok {
 		curBucket = bucketDetail{
 			MainChan:       make(chan int64, s.config.Limit[bucketType]),
 			FlagToDelition: false,
 		}
-		s.lock.Lock()
-		s.bucketBunch[bucketType][bucketKey] = curBucket
-		s.lock.Unlock()
 	}
 	if curBucket.FlagToDelition {
 		curBucket.FlagToDelition = false
-		s.lock.Lock()
-		s.bucketBunch[bucketType][bucketKey] = curBucket
-		s.lock.Unlock()
 	}
+	s.bucketBunch[bucketType][bucketKey] = curBucket
+	s.lock.Unlock()
 
 	curBucketChan := curBucket.MainChan
 	now := time.Now().Unix()
