@@ -35,7 +35,7 @@ type ConfigStruct struct {
 type buckets map[string]bucketDetail
 
 type bucketDetail struct {
-	MainChan       chan int64
+	MainChan       chan bool
 	FlagToDelition bool
 }
 
@@ -46,6 +46,7 @@ func (s *Service) InitService() {
 
 	s.loadConfig()
 	s.initValues()
+	s.initGap(ctx)
 	s.InitRemover(ctx)
 
 	lsn, err := net.Listen("tcp", s.config.ListenerAdress)
@@ -78,6 +79,34 @@ func (s *Service) InitRemover(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (s *Service) initGap(ctx context.Context) {
+	for bucketType, limit := range s.config.Limit {
+		tickerDelta := 1000 * int(s.config.TimerSec) / limit
+		ticker := time.NewTicker(time.Duration(tickerDelta) * time.Millisecond)
+
+		go func(bucketType string) {
+			for {
+				select {
+				case <-ctx.Done():
+					ticker.Stop()
+					return
+				case <-ticker.C:
+					s.removeFromBuckets(bucketType)
+				}
+			}
+		}(bucketType)
+	}
+}
+
+func (s *Service) removeFromBuckets(bucketType string) {
+	for _, bucket := range s.bucketBunch[bucketType] {
+		select {
+		case <-bucket.MainChan:
+		default:
+		}
+	}
 }
 
 func (s *Service) loadConfig() {
@@ -135,7 +164,7 @@ func (s *Service) addToBucket(bucketType string, bucketKey string) (isAlive bool
 	curBucket, ok := s.bucketBunch[bucketType][bucketKey]
 	if !ok {
 		curBucket = bucketDetail{
-			MainChan:       make(chan int64, s.config.Limit[bucketType]),
+			MainChan:       make(chan bool, s.config.Limit[bucketType]),
 			FlagToDelition: false,
 		}
 	}
@@ -146,27 +175,10 @@ func (s *Service) addToBucket(bucketType string, bucketKey string) (isAlive bool
 	s.lock.Unlock()
 
 	curBucketChan := curBucket.MainChan
-	now := time.Now().Unix()
-	oldTime := time.Now().Unix() - s.config.TimerSec
 
 	select {
-	case curBucketChan <- now:
+	case curBucketChan <- true:
 		return true
-	default:
-		for {
-			nextElem := <-curBucketChan
-			if nextElem > oldTime {
-				break
-			}
-			if len(curBucketChan) == 0 {
-				break
-			}
-		}
-	}
-
-	select {
-	case curBucketChan <- now:
-		return len(curBucketChan) < s.config.Limit[bucketType]
 	default:
 		return false
 	}
