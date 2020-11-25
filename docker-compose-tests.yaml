@@ -1,0 +1,19 @@
+version: "3.3"
+
+services:
+  bouncer:
+    container_name: bouncer
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    ports:
+      - "50051:50051"
+    environment:
+      - CONFIG_PATH=./config/config.json
+
+  itests:
+    build:
+      context: .
+      dockerfile: ./tests/Dockerfile
+    depends_on:
+      - bouncer

@@ -1,0 +1,13 @@
+{
+    "ListenerAdress":"0.0.0.0:50051",
+    "TimerSec":60,
+    "Limit": {
+        "login":    10,
+		"password": 100,
+		"ip":       1000
+    },
+    "Lists": {
+        "black":    [],
+		"white":    []
+    }
+}

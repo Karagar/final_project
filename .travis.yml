@@ -1,0 +1,37 @@
+language: go
+
+go:
+  - 1.15.x
+
+notifications:
+  email: false
+
+env:
+  global:
+    - GO111MODULE=on
+
+jobs:
+  include:
+    - stage: "Compile"
+      name: "Compile Packages and Dependencies"
+      script: make build
+
+    - stage: "Code Quality"
+      name: "Linters"
+      install: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.32.2
+      script: golangci-lint run ./...
+
+    - stage: "Unit Tests"
+      name: "Unit Tests"
+      script: make test
+
+    - stage: "Integration Tests"
+      name: "Integration Tests"
+      env:
+        DOCKER_COMPOSE_VERSION: 1.27.4
+      before_install:
+        - sudo rm /usr/local/bin/docker-compose
+        - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-`uname -s`-`uname -m` > docker-compose
+        - chmod +x docker-compose
+        - sudo mv docker-compose /usr/local/bin
+      script: make itests
