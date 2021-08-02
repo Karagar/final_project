@@ -1,0 +1,13 @@
+version: "3.4"
+
+services:
+  bouncer:
+    container_name: bouncer
+    build: 
+      context: .
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    environment:
+    - CONFIG_PATH=./config/config.json
